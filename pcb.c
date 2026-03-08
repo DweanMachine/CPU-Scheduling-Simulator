@@ -1,6 +1,12 @@
+/*
+Execution: gcc -o pcb pcb.c
+Output: ./pcb
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #define MAX_LINE_LENGTH 1024
 
 typedef struct PCB {
@@ -39,10 +45,16 @@ void print_process(PCB* process) { //Print the details of a process
     printf("PID: %s, Arr: %d, Burst: %d, Rem: %d, Prio: %d, State: %s\n", process->pid, process->arrival_time, process->burst_time, process->remaining_time,  process->priority, process->state);
 }
 
-void neat_process_output(PCB* processes[]) {
+void neat_process_output(PCB* processes[]) { //Properly prints the output in a nice neat graph
     printf("NEW:\n");
     for (int i = 0; i < 4; i++) {
         if (strcmp(processes[i]->state, "New") == 0) {
+            print_process(processes[i]);
+        }
+    }
+    printf("READY:\n");
+    for (int i = 0; i < 4; i++) {
+        if (strcmp(processes[i]->state, "Ready") == 0) {
             print_process(processes[i]);
         }
     }
@@ -74,7 +86,8 @@ void update_process_state(PCB* process, char* new_state, int current_time) {
 }
 
 void increment_time(PCB* process, int current_time) {
-    if (strcmp(process->state, "Running") != 0) return;  // only tick Running processes
+    //only increment remaining time for running processes
+    if (strcmp(process->state, "Running") != 0) return;  
     
     process->remaining_time--;
 
@@ -84,36 +97,50 @@ void increment_time(PCB* process, int current_time) {
 }
 
 //Initializes each process & state
-void start_timer(PCB* processes[], int num_processes, int total_time) {
+void start_timer(PCB* processes[], int proc_count, int total_time) {
     for (int time = 0; time < total_time; time++) {
         printf("\nTime: %d\n", time);
 
-        // Step 1 — Admit ONLY processes that arrive at this exact time
-        for (int i = 0; i < num_processes; i++) {
-            PCB* p = processes[i];
-            if (p->arrival_time == time && strcmp(p->state, "New") == 0) {
-                update_process_state(p, "Ready", time);   // NEW → READY
-            }
-        }
+        first_come_first_serve(processes, proc_count, time);
+    }
+}
 
-        // Step 2 — Assign CPU to first Ready process (FCFS)
-        for (int i = 0; i < num_processes; i++) {
+void first_come_first_serve(PCB* processes[], int proc_count, int time) {
+    //If arrival time has been reached, the proc state will become new
+    for (int i = 0; i < proc_count; i++) { 
+        PCB* p = processes[i];
+        if (p->arrival_time == time && strcmp(p->state, "New") == 0) {
+            update_process_state(p, "Ready", time);
+        }
+    }
+    
+    //Boolean value which implies if cpu is free or not
+    bool cpu_free = true; 
+    for (int i = 0; i < proc_count; i++) {
+        if (strcmp(processes[i]->state, "Running") == 0) {
+            cpu_free = false;
+            break;
+        }
+    }
+
+    //Checks if any processes are currently running on the CPU
+    if (cpu_free) {
+        for (int i = 0; i < proc_count; i++) {
             PCB* p = processes[i];
             if (strcmp(p->state, "Ready") == 0) {
-                update_process_state(p, "Running", time); // READY → RUNNING
-                break;  // only one runs at a time
+                update_process_state(p, "Running", time);
+                break;
             }
         }
+    }
 
-        // Step 3 — Tick and print all non-New, non-Terminated processes
-        for (int i = 0; i < num_processes; i++) {
-            PCB* p = processes[i];
-            if (strcmp(p->state, "New") != 0 &&
-                strcmp(p->state, "Terminated") != 0) {
-                increment_time(p, time);
-            }
+    neat_process_output(processes);
+    for (int i = 0; i < proc_count; i++) {
+        PCB* p = processes[i];
+        if (strcmp(p->state, "New") != 0 &&
+            strcmp(p->state, "Terminated") != 0) {
+            increment_time(p, time);
         }
-        neat_process_output(processes);
     }
 }
 
@@ -145,7 +172,7 @@ int main() {
     printf("\n--- Simulating Process Execution: ---\n");
 
     // For simplicity, simulate all processes together
-    start_timer(processes, sizeof(processes) / sizeof(processes[0]), 5);
+    start_timer(processes, sizeof(processes) / sizeof(processes[0]), 12);
     free_processes(processes);
     return 0;
 }

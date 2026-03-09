@@ -97,23 +97,44 @@ void increment_time(PCB* process, int current_time) {
 }
 
 //Initializes each process & state
-void start_timer(PCB* processes[], int proc_count, int total_time) {
+void start_timer(PCB* processes[], int proc_count, int total_time, int schedulingAlgorithm) {
     for (int time = 0; time < total_time; time++) {
         printf("\nTime: %d\n", time);
+        
+        for (int i = 0; i < proc_count; i++) {
+            PCB* p = processes[i];
+            if (p->arrival_time == time && strcmp(p->state, "New") == 0) {
+                update_process_state(p, "Ready", time);
+            }
+        }
 
-        first_come_first_serve(processes, proc_count, time);
+        switch (schedulingAlgorithm) {
+            case 1:
+                first_come_first_serve(processes, proc_count, time);
+                break;
+            case 2:
+                shortest_time_remaining_first(processes, proc_count, time);
+                break;
+            case 3:
+                //priority_scheduling(processes, proc_count, time);
+            default:
+                printf("WHAAAAAAATTTT???");
+                break;
+        }
+        neat_process_output(processes);
+
+        //Increment time by 1
+        for (int i = 0; i < proc_count; i++) {
+            PCB* p = processes[i];
+            if (strcmp(p->state, "New") != 0 &&
+                strcmp(p->state, "Terminated") != 0) {
+                increment_time(p, time);
+            }
+        }  
     }
 }
 
-void first_come_first_serve(PCB* processes[], int proc_count, int time) {
-    //If arrival time has been reached, the proc state will become new
-    for (int i = 0; i < proc_count; i++) { 
-        PCB* p = processes[i];
-        if (p->arrival_time == time && strcmp(p->state, "New") == 0) {
-            update_process_state(p, "Ready", time);
-        }
-    }
-    
+void first_come_first_serve(PCB* processes[], int proc_count, int time) {    
     //Boolean value which implies if cpu is free or not
     bool cpu_free = true; 
     for (int i = 0; i < proc_count; i++) {
@@ -133,16 +154,36 @@ void first_come_first_serve(PCB* processes[], int proc_count, int time) {
             }
         }
     }
+}
 
-    neat_process_output(processes);
+void shortest_time_remaining_first(PCB* processes[], int proc_count, int time) {
+
+    //Keeps track of the process with shortest remaining time
+    PCB* shortest = NULL;
     for (int i = 0; i < proc_count; i++) {
         PCB* p = processes[i];
-        if (strcmp(p->state, "New") != 0 &&
-            strcmp(p->state, "Terminated") != 0) {
-            increment_time(p, time);
+        if (strcmp(p->state, "Ready") == 0 || strcmp(p->state, "Running") == 0) {
+            if (shortest == NULL || p->remaining_time < shortest->remaining_time) {
+                shortest = p;
+            }
         }
     }
+
+    // Step 3 — Preempt current Running process if shorter one exists
+    for (int i = 0; i < proc_count; i++) {
+        PCB* p = processes[i];
+        if (strcmp(p->state, "Running") == 0 && p != shortest) {
+            update_process_state(p, "Ready", time);   // preempt — Running → Ready
+        }
+    }
+
+    //Promote shortest time to Running
+    if (shortest != NULL && strcmp(shortest->state, "Ready") == 0) {
+        update_process_state(shortest, "Running", time);
+    }
 }
+
+void priority_scheduling(PCB* processes[], int proc_count, int time);
 
 int main() {
     PCB* processes[4];
@@ -164,6 +205,13 @@ int main() {
     PCB* running = NULL; 
     fclose(file);
 
+    int schedulingAlgorithm;
+    printf("Choose scheduling algorithm:\n");
+    printf("[1] First Come First Serve\n");
+    printf("[2] Shortest Time Remaining First\n");
+    printf("[3] Priority Scheduling\n");
+    printf("[4] Round Robin\n");
+    scanf("%d", &schedulingAlgorithm);
     
     printf("Initial Process States:\n");
     for (int i = 0; i < sizeof(processes) / sizeof(processes[0]); i++) {
@@ -172,7 +220,7 @@ int main() {
     printf("\n--- Simulating Process Execution: ---\n");
 
     // For simplicity, simulate all processes together
-    start_timer(processes, sizeof(processes) / sizeof(processes[0]), 12);
+    start_timer(processes, sizeof(processes) / sizeof(processes[0]), 12, schedulingAlgorithm);
     free_processes(processes);
     return 0;
 }

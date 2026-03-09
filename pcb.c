@@ -204,27 +204,29 @@ void shortest_time_remaining_first(PCB* processes[], int proc_count, int time) {
 
 void priority_scheduling(PCB* processes[], int proc_count, int time) {
     //Keeps track of the process with the highest priority
-    PCB* highest = NULL;
+    
+    bool cpu_free = true;
     for (int i = 0; i < proc_count; i++) {
-        PCB* p = processes[i];
-        if (strcmp(p->state, "Ready") == 0 || strcmp(p->state, "Running") == 0) {
-            if (highest == NULL || p->priority < highest->priority) {
-                highest = p;
+        if (strcmp(processes[i]->state, "Running") == 0) {
+            cpu_free = 0;
+            break;
+        }
+    }
+
+    if (cpu_free) {
+        PCB* highest = NULL;
+        for (int i = 0; i < proc_count; i++) {
+            PCB* p = processes[i];
+            if (strcmp(p->state, "Ready") == 0) {       // ✅ Ready only, not Running
+                if (highest == NULL || p->priority < highest->priority) {
+                    highest = p;
+                }
             }
         }
-    }
 
-    //Finds next highest priority after a process finishes
-    for (int i = 0; i < proc_count; i++) {
-        PCB* p = processes[i];
-        if (strcmp(p->state, "Running") == 0 && p != highest) {
-            update_process_state(p, "Ready", time);   // preempt — Running → Ready
+        if (highest != NULL) {
+            update_process_state(highest, "Running", time);
         }
-    }
-
-    //Promote highest priority to Running
-    if (highest != NULL && strcmp(highest->state, "Ready") == 0) {
-        update_process_state(highest, "Running", time);
     }
 }
 

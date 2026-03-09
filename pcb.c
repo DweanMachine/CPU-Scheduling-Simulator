@@ -17,7 +17,6 @@ typedef struct PCB {
     int remaining_time;
     int priority;          
     char state[12];   //"New", "Ready", "Running", or "Terminated"    
-    struct PCB* next; //Points to the next process in the list
     int last_updated;
 } PCB;
 
@@ -37,7 +36,6 @@ PCB* create_process(char* pid, int arrival_time, int burst_time, int priority) {
     
     //Set the initial state of the process to "New"
     strcpy(new_process->state, "New");
-    new_process -> next = NULL;
     return new_process;
 }
 
@@ -96,8 +94,22 @@ void increment_time(PCB* process, int current_time) {
     }
 }
 
+//Used ONLY for round robin to reset the quantum counter
+void rr_increment_time(PCB* process, int current_time, int* quantum_counter) {
+    //only increment remaining time for running processes
+    if (strcmp(process->state, "Running") != 0) return;  
+    
+    process->remaining_time--;
+
+    if (process->remaining_time == 0) {
+        update_process_state(process, "Terminated", current_time);
+        *quantum_counter = 0;
+    }
+}
+
 //Initializes each process & state
 void start_timer(PCB* processes[], int proc_count, int total_time, int schedulingAlgorithm) {
+    int quantum_counter = 0; //For Round Robin
     for (int time = 0; time < total_time; time++) {
         printf("\nTime: %d\n", time);
         
@@ -116,10 +128,14 @@ void start_timer(PCB* processes[], int proc_count, int total_time, int schedulin
                 shortest_time_remaining_first(processes, proc_count, time);
                 break;
             case 3:
-                //priority_scheduling(processes, proc_count, time);
-            default:
-                printf("WHAAAAAAATTTT???");
+                priority_scheduling(processes, proc_count, time);
                 break;
+            case 4:
+                round_robin(processes, proc_count, time, &quantum_counter);
+                break;
+            default:
+                printf("Invalid index. Exiting...\n");
+                exit(0);
         }
         neat_process_output(processes);
 
@@ -128,9 +144,13 @@ void start_timer(PCB* processes[], int proc_count, int total_time, int schedulin
             PCB* p = processes[i];
             if (strcmp(p->state, "New") != 0 &&
                 strcmp(p->state, "Terminated") != 0) {
-                increment_time(p, time);
+                if (schedulingAlgorithm < 4) {
+                    increment_time(p, time);
+                } else {
+                    rr_increment_time(p, time, &quantum_counter);
+                }
             }
-        }  
+        }
     }
 }
 
@@ -157,7 +177,6 @@ void first_come_first_serve(PCB* processes[], int proc_count, int time) {
 }
 
 void shortest_time_remaining_first(PCB* processes[], int proc_count, int time) {
-
     //Keeps track of the process with shortest remaining time
     PCB* shortest = NULL;
     for (int i = 0; i < proc_count; i++) {
@@ -169,7 +188,7 @@ void shortest_time_remaining_first(PCB* processes[], int proc_count, int time) {
         }
     }
 
-    // Step 3 — Preempt current Running process if shorter one exists
+    //Preempt current Running process if shorter one exists
     for (int i = 0; i < proc_count; i++) {
         PCB* p = processes[i];
         if (strcmp(p->state, "Running") == 0 && p != shortest) {
@@ -183,7 +202,69 @@ void shortest_time_remaining_first(PCB* processes[], int proc_count, int time) {
     }
 }
 
-void priority_scheduling(PCB* processes[], int proc_count, int time);
+void priority_scheduling(PCB* processes[], int proc_count, int time) {
+    //Keeps track of the process with the highest priority
+    PCB* highest = NULL;
+    for (int i = 0; i < proc_count; i++) {
+        PCB* p = processes[i];
+        if (strcmp(p->state, "Ready") == 0 || strcmp(p->state, "Running") == 0) {
+            if (highest == NULL || p->priority < highest->priority) {
+                highest = p;
+            }
+        }
+    }
+
+    //Finds next highest priority after a process finishes
+    for (int i = 0; i < proc_count; i++) {
+        PCB* p = processes[i];
+        if (strcmp(p->state, "Running") == 0 && p != highest) {
+            update_process_state(p, "Ready", time);   // preempt — Running → Ready
+        }
+    }
+
+    //Promote highest priority to Running
+    if (highest != NULL && strcmp(highest->state, "Ready") == 0) {
+        update_process_state(highest, "Running", time);
+    }
+}
+
+void round_robin(PCB* processes[], int proc_count, int time, int* quantum_counter) {
+    int time_quantum = 2;
+    int running = -1;
+    int preempted_index = -1;
+
+    // Find currently running process
+    for (int i = 0; i < proc_count; i++) {
+        if (strcmp(processes[i]->state, "Running") == 0) {
+            running = i;
+            preempted_index = running;
+            break;
+        }
+    }
+
+    // Preempt if quantum expires
+    if (running != -1 && *quantum_counter >= time_quantum) {
+        update_process_state(processes[running], "Ready", time);
+        running = -1;
+        *quantum_counter = 0;
+    }
+
+    // Schedule next Ready process starting AFTER the preempted one
+    if (running == -1) {
+        int start = (preempted_index + 1) % proc_count;
+        for (int i = 0; i < proc_count; i++) {
+            int idx = (start + i) % proc_count;
+            PCB* p = processes[idx];
+            if (strcmp(p->state, "Ready") == 0) {
+                update_process_state(p, "Running", time);
+                running = idx;
+                break;
+            }
+        }
+    }
+
+    if (running != -1) (*quantum_counter)++;
+}
 
 int main() {
     PCB* processes[4];
@@ -219,7 +300,7 @@ int main() {
     }
     printf("\n--- Simulating Process Execution: ---\n");
 
-    // For simplicity, simulate all processes together
+    //For simplicity, simulate all processes together
     start_timer(processes, sizeof(processes) / sizeof(processes[0]), 12, schedulingAlgorithm);
     free_processes(processes);
     return 0;
